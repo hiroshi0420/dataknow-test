@@ -1,10 +1,10 @@
-# Prueba Técnica 2 – RAG Legal
-# DataKnow SAS
+#Requerimientos técnicos, se recomienda instalar en un entorno virtual o contenedor
 
 # Data
 pandas>=2.0.0
 openpyxl>=3.1.0
 numpy>=1.24.0
+python-dotenv>=1.0.0
 
 # Embeddings (modo local)
 sentence-transformers>=2.2.0
@@ -14,7 +14,7 @@ faiss-cpu>=1.7.4
 
 # LLM (Azure OpenAI o local)
 openai>=1.12.0          # Para Azure OpenAI
-# requests>=2.31.0      # Para Ollama local (descomentar si usas modo local)
+requests>=2.31.0        # Para Ollama local
 
 # Calidad de código (bono +5%)
 ruff>=0.1.0
@@ -23,5 +23,5 @@ black>=23.0.0
 # Tests
 pytest>=7.4.0
 
-# Opcional: interfaz web
+# Opcional: interfaz web (tambien se puede desplegar en un aplicativo web javascript)
 # streamlit>=1.28.0

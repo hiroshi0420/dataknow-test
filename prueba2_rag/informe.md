@@ -15,7 +15,7 @@ El reto específico de esta prueba es crear una PoC (Prueba de Concepto) de IA G
 
 ## 2. Supuestos
 
-- El Excel contiene 329 filas con columnas: `Providencia`, `Fecha Sentencia`, `Tema - subtema`, `resuelve` y `sintesis`. Se verificó que existen casos sobre redes sociales (47), acoso escolar (9) y PIAR (2).
+- El Excel contiene 329 filas y las siguientes columnas: `Providencia`, `Fecha Sentencia`, `Tema - subtema`, `resuelve` y `sintesis`. Se verificó que existen casos sobre redes sociales (47), acoso escolar (9) y PIAR (2).
 - Las respuestas deben generarse **solo** con base en el contenido del Excel; el sistema no puede inventar información.
 - Se asume que los clientes no tienen conocimientos legales, por lo que el lenguaje debe ser completamente accesible.
 - Para las 3 demandas de redes sociales pedidas, se eligieron automáticamente las más relevantes semánticamente mediante retrieval; esta selección es reproducible y auditable.
