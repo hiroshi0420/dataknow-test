@@ -84,8 +84,6 @@ docker compose --profile ollama up --build
 
 ## Azure (idea de despliegue, opcional)
 
-- Empaqueta la solución con Docker.
+- Empaqueta la solución con Docker (realizado).
 - Sube la imagen a Azure Container Registry (ACR).
 - Despliega en Azure Container Apps con variables de entorno (Azure OpenAI).
-
-*(Para la prueba suele ser suficiente con evidenciar que el código soporta Azure OpenAI y que el contenedor corre local.)*

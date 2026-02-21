@@ -26,7 +26,7 @@ from ingest import load_excel, build_documents, filter_by_keywords
 from index import build_index, search
 from qa import answer, save_answers
 
-# ---- Keywords para filtros determinísticos ----
+#  Keywords para filtros determinísticos, se pueden ampliar o modificar
 REDES_KEYWORDS = [
     "facebook",
     "instagram",
