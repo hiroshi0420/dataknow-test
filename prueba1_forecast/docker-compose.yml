@@ -1,0 +1,20 @@
+services:
+  pipeline:
+    build: .
+    container_name: cost_forecast_pipeline
+    volumes:
+      - ./Datos:/app/Datos:ro
+      - ./outputs:/app/outputs
+    environment:
+      - MPLBACKEND=Agg
+    command: [ "python", "main.py", "--horizon", "36" ]
+
+  api:
+    build: .
+    container_name: cost_forecast_api
+    volumes:
+      - ./Datos:/app/Datos:ro
+      - ./outputs:/app/outputs
+    ports:
+      - "8000:8000"
+    command: [ "uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000" ]
