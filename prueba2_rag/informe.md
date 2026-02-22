@@ -3,19 +3,34 @@
 
 **DataKnow SAS | Científico de Datos**
 
+## 1.Hipótesis previa del problema: 
+
+Primero se debe entender que es una sentencia y tener claro algunos aspectos que son lógicos para un abogado pero no para la gente común que no tiene conocimientos legales. En derecho, “sentencia” suele ser la decisión final del juez/tribunal y puede venir en la parte resolutiva (“RESUELVE”, “DECIDE”, “FALLA”, etc.). En el excel no existe la columna especifica de sentencia, por lo que se debe usar la columna `resuelve` para obtener la sentencia y en caso de tener esta columna vacia, se debe usar la columna `sintesis` para obtener la sentencia o un resumen de que se trato dicho caso.
+
+Adicional las primer dos preguntas dan selección libre para que el usuario pueda seleccionar la que le interese, en este caso los datos son la regla principal para poder seleccionar el tema que mas se encuentra dentro del Excel, de esta forma tenemos un dataset que tenga suficiente datos para poder mostrar el valor del RAF y reducir ambiguedad cuando el conjunto de datos es pequeño.
+
+La consigna permite elegir libremente 3 demandas. Para evitar una selección arbitraria, realicé un análisis exploratorio de texto sobre las columnas “Tema - subtema” y “síntesis”. En particular, calculé la frecuencia de bigramas (pares de palabras) tras normalización y remoción de stopwords. Este análisis mostró que expresiones relacionadas con “redes sociales” aparecen entre los patrones más repetidos del dataset y cuentan con masa crítica suficiente de casos. Por ello, definí “redes sociales” como criterio temático reproducible para escoger 3 demandas y demostrar el flujo RAG (recuperación semántica + respuesta con fuentes). Las 3 demandas se seleccionaron como las más relevantes/recientes dentro del subconjunto de casos que mencionan redes sociales.
+
+
+
 ---
 
-## 1. Explicación del Caso
+## 2. Explicación del Caso
 
 Un consultorio legal necesita automatizar la consulta de su historial de demandas y sentencias para agilizar la asesoría a clientes. Actualmente los abogados consultan manualmente un Excel con 329 casos históricos para orientar a sus clientes sobre posibles resultados de nuevas demandas.
 
 El reto específico de esta prueba es crear una PoC (Prueba de Concepto) de IA Generativa que permita hacer preguntas en lenguaje natural y recibir respuestas claras, en lenguaje coloquial, sin jerga jurídica, respaldadas en los casos reales del archivo.
 
+Para poder entender bien el alcance me acerque a un amigo abogado para que me ayude a entender los terminos que se tienen en Excel
+
+Qué es una demanda: cada fila del Excel representa un caso (demanda/proceso) identificado por su providencia/fecha/tema y un resumen.
+
+Qué es una sentencia en este dataset: como no siempre está el texto completo del fallo, se define “sentencia” como la decisión del caso registrada en el campo Resuelve/Decisión; si faltara, se aproxima desde el resumen del resultado.
 ---
 
-## 2. Supuestos
+## 3. Supuestos
 
-- El Excel contiene 329 filas con columnas: `Providencia`, `Fecha Sentencia`, `Tema - subtema`, `resuelve` y `sintesis`. Se verificó que existen casos sobre redes sociales (47), acoso escolar (9) y PIAR (2).
+- El Excel contiene 329 filas y las siguientes columnas: `Providencia`, `Fecha Sentencia`, `Tema - subtema`, `resuelve` y `sintesis`. Se verificó que existen casos sobre redes sociales (47), acoso escolar (9) y PIAR (2).
 - Las respuestas deben generarse **solo** con base en el contenido del Excel; el sistema no puede inventar información.
 - Se asume que los clientes no tienen conocimientos legales, por lo que el lenguaje debe ser completamente accesible.
 - Para las 3 demandas de redes sociales pedidas, se eligieron automáticamente las más relevantes semánticamente mediante retrieval; esta selección es reproducible y auditable.
@@ -23,7 +38,7 @@ El reto específico de esta prueba es crear una PoC (Prueba de Concepto) de IA G
 
 ---
 
-## 3. Formas para Resolver el Caso y Opción Tomada
+## 4. Formas para Resolver el Caso y Opción Tomada
 
 ### Opciones evaluadas
 
@@ -55,7 +70,7 @@ Para preguntas sobre temas específicos (redes sociales, acoso escolar, PIAR) se
 
 ---
 
-## 4. Resultados del Análisis de los Datos y los Modelos
+## 5. Resultados del Análisis de los Datos y los Modelos
 
 ### Análisis del dataset
 
@@ -84,7 +99,7 @@ FAISS con `IndexFlatIP` (producto interno = similitud coseno con vectores normal
 
 ---
 
-## 5. Futuros Ajustes o Mejoras
+## 6. Futuros Ajustes o Mejoras
 
 **Técnicas:**
 - Usar un modelo de embeddings más potente (multilingual-e5-large) para mejor recuperación en español jurídico.
@@ -103,7 +118,7 @@ FAISS con `IndexFlatIP` (producto interno = similitud coseno con vectores normal
 
 ---
 
-## 6. Apreciaciones y Comentarios (Opcional)
+## 7. Apreciaciones y Comentarios (Opcional)
 
 El caso es un excelente ejemplo de cómo la IA Generativa puede aportar valor inmediato en procesos de conocimiento intensivo sin necesidad de un desarrollo complejo. Un RAG bien construido sobre datos de calidad supera en practicidad a soluciones más complejas como el fine-tuning.
 

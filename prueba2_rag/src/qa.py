@@ -1,30 +1,34 @@
 """
-qa.py
------
 Motor de preguntas y respuestas (RAG).
-Recupera documentos relevantes y genera respuestas en lenguaje coloquial.
 
-Soporta dos modos de LLM:
-  - LOCAL: usa un modelo open source vía Ollama o HuggingFace
-  - AZURE: usa Azure OpenAI Chat (bono +5%)
+Soporta 3 modos de LLM:
+  - azure: Azure OpenAI Chat
+  - local: Ollama local (sin API)
+  - extractive: sin LLM; genera una respuesta extractiva basada en los campos
+    recuperados (útil para pruebas/offline y para evitar fallos cuando faltan credenciales).
+
 """
+
+from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import List, Dict
+
 
 # ---- Configuración LLM ----
-LLM_MODE = os.getenv("LLM_MODE", "azure")  # "local" o "azure"
+LLM_MODE = os.getenv("LLM_MODE", "azure").lower()  # azure | local | extractive
 
 # Azure OpenAI Chat
 AZURE_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "")
 AZURE_API_KEY = os.getenv("AZURE_OPENAI_API_KEY", "")
 AZURE_CHAT_DEPLOYMENT = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT", "gpt-4o")
+AZURE_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-01")
 
 # ---- Prompt base ----
-# Este prompt es clave para evitar alucinaciones y respuestas en jerga jurídica.
 SYSTEM_PROMPT = """
-Eres un asistente legal amigable. Tu trabajo es explicar casos jurídicos 
-en lenguaje sencillo y coloquial, como si le explicaras a un amigo que 
+Eres un asistente legal amigable. Tu trabajo es explicar casos jurídicos
+en lenguaje sencillo y coloquial, como si le explicaras a un amigo que
 no estudió derecho.
 
 Reglas estrictas:
@@ -34,168 +38,234 @@ Reglas estrictas:
 4. Usa un lenguaje simple, cercano y directo. Evita términos jurídicos complejos.
 5. Al final de cada respuesta, incluye siempre: "📄 Fuente: [Providencia] ([Fecha])"
 6. Si hay varios casos relevantes, menciona cada uno con su fuente.
-"""
+""".strip()
 
-def format_context(retrieved_docs: list[dict]) -> str:
-    """
-    Formatea los documentos recuperados como contexto para el LLM.
-    
-    Args:
-        retrieved_docs: Lista de dicts de index.search()
-        
-    Returns:
-        String con el contexto estructurado
-    """
+
+def format_context(retrieved_docs: List[Dict]) -> str:
+    """Formatea documentos recuperados como contexto para el LLM."""
     if not retrieved_docs:
         return "No se encontraron casos relevantes."
-    
+
     context_parts = []
     for i, doc in enumerate(retrieved_docs, 1):
         context_parts.append(
             f"--- Caso {i} ---\n"
-            f"Providencia: {doc['providencia']}\n"
-            f"Fecha: {doc['fecha']}\n"
-            f"Tema: {doc['tema'][:300] if doc['tema'] else 'No disponible'}\n"
-            f"Síntesis: {doc['sintesis'][:600] if doc['sintesis'] else 'No disponible'}\n"
-            f"Sentencia: {doc['resuelve'][:400] if doc['resuelve'] else 'No disponible'}\n"
+            f"Providencia: {doc.get('providencia','')}\n"
+            f"Fecha: {doc.get('fecha','')}\n"
+            f"Tema: {(doc.get('tema') or 'No disponible')[:300]}\n"
+            f"Síntesis: {(doc.get('sintesis') or 'No disponible')[:800]}\n"
+            f"Sentencia: {(doc.get('resuelve') or 'No disponible')[:700]}\n"
         )
-    
+
     return "\n".join(context_parts)
 
 
-def call_llm_azure(messages: list[dict]) -> str:
-    """
-    Llama a Azure OpenAI Chat Completions.
-    
-    Requiere variables de entorno:
-      AZURE_OPENAI_ENDPOINT
-      AZURE_OPENAI_API_KEY
-      AZURE_OPENAI_CHAT_DEPLOYMENT
-    """
+def _validate_azure_env() -> None:
+    missing = []
+    if not AZURE_ENDPOINT:
+        missing.append("AZURE_OPENAI_ENDPOINT")
+    if not AZURE_API_KEY:
+        missing.append("AZURE_OPENAI_API_KEY")
+    if not AZURE_CHAT_DEPLOYMENT:
+        missing.append("AZURE_OPENAI_CHAT_DEPLOYMENT")
+    if missing:
+        raise RuntimeError(
+            "Faltan variables de entorno para Azure OpenAI: " + ", ".join(missing)
+        )
+
+
+def call_llm_azure(messages: List[Dict]) -> str:
+    """Llama a Azure OpenAI Chat Completions."""
+    _validate_azure_env()
+
     from openai import AzureOpenAI
-    
+
     client = AzureOpenAI(
         azure_endpoint=AZURE_ENDPOINT,
         api_key=AZURE_API_KEY,
-        api_version="2024-02-01",
+        api_version=AZURE_API_VERSION,
     )
-    
+
     response = client.chat.completions.create(
         model=AZURE_CHAT_DEPLOYMENT,
         messages=messages,
-        temperature=0.1,  # Bajo para respuestas más precisas y menos creativas
-        max_tokens=800,
+        max_completion_tokens=900,
     )
-    
+
+    choice = response.choices[0]
+    text = (choice.message.content or "").strip()
+
+    # Debug útil (puedes dejarlo, no molesta)
+    print(f"[AZURE] finish_reason={getattr(choice, 'finish_reason', None)} | chars={len(text)}")
+
+    if not text:
+        # Si Azure responde vacío, hacemos fallback seguro para no romper la entrega
+        return ""
+    return text
+
     return response.choices[0].message.content
 
 
-def call_llm_local(messages: list[dict]) -> str:
-    """
-    Llama a un LLM local via Ollama.
-    
-    Instalar Ollama: https://ollama.ai
-    Modelo recomendado: ollama pull mistral o ollama pull llama3
-    
-    También puedes adaptar esto para HuggingFace Inference API.
-    """
+def call_llm_local(messages: List[Dict]) -> str:
+    """Llama a un LLM local via Ollama."""
     import requests
-    
-    # Convertir formato OpenAI a Ollama
+
     prompt = f"Sistema: {messages[0]['content']}\n\n"
     for msg in messages[1:]:
         role = "Usuario" if msg["role"] == "user" else "Asistente"
         prompt += f"{role}: {msg['content']}\n"
-    
+
     response = requests.post(
-        "http://localhost:11434/api/generate",
+        "http://ollama:11434/api/generate",
         json={
             "model": os.getenv("OLLAMA_MODEL", "mistral"),
             "prompt": prompt,
             "stream": False,
             "options": {"temperature": 0.1},
         },
-        timeout=120,
+        timeout=800, # Se aumenta tiempo debido a capacidades locales, ajustar segun el caso.
     )
-    
+
+    response.raise_for_status()
     return response.json()["response"]
 
 
-def answer(
-    question: str,
-    retrieved_docs: list[dict],
-    verbose: bool = True,
-) -> str:
+def _plain_decision(resuelve: str) -> str:
+    t = (resuelve or "").upper()
+    if any(k in t for k in ["CONCEDE", "AMPARA", "TUTELA", "SE PROTEGE"]):
+        return "En resumen: la Corte le dio la razón a la parte que demandó (concedió la tutela/amparo)."
+    if any(k in t for k in ["NIEGA", "SE NIEGA", "NO CONCEDE"]):
+        return "En resumen: la Corte no le dio la razón (negó la tutela)."
+    if "IMPROCED" in t:
+        return "En resumen: la Corte dijo que ese camino no aplicaba para este caso (lo declaró improcedente)."
+    if any(k in t for k in ["ORDENA", "SE ORDENA", "DISPONE"]):
+        return "En resumen: la Corte ordenó acciones concretas para corregir la situación."
+    return "En resumen: la decisión está descrita en el apartado 'Sentencia/Resuelve'."
+
+
+def answer_extractive(question: str, retrieved_docs: List[Dict]) -> str:
+    """Respuesta sin LLM (fallback).
+
+    La respuesta se arma con los campos recuperados (sintesis/resuelve) y se
+    intenta mantener en lenguaje sencillo. Se adapta al tipo de pregunta:
+      - si preguntan por "sentencia": prioriza resuelve/decisión
+      - si preguntan por "de qué se trató" o "detalle": prioriza síntesis
     """
-    Genera una respuesta a la pregunta usando los documentos recuperados.
-    
-    Args:
-        question: Pregunta del usuario
-        retrieved_docs: Documentos relevantes de index.search()
-        verbose: Si True, imprime el contexto usado
-        
-    Returns:
-        Respuesta en lenguaje coloquial con fuentes
-    """
+    if not retrieved_docs:
+        return "No encontré información sobre eso en los casos disponibles."
+
+    q = (question or "").lower()
+    want_sentence = any(k in q for k in ["sentencia", "resuelve", "decisión", "decision"]) and "de qué" not in q and "detalle" not in q
+    want_story = any(k in q for k in ["de qué", "de que", "trató", "trato", "qué pasó", "que paso", "detalle"])
+
+    lines: list[str] = []
+    for doc in retrieved_docs:
+        providencia = doc.get("providencia") or "(sin providencia)"
+        fecha = doc.get("fecha") or "(sin fecha)"
+
+        sintesis = (doc.get("sintesis") or "").strip()
+        resuelve = (doc.get("resuelve") or "").strip()
+
+        # Recortes para que el output sea legible
+        sintesis_short = (sintesis[:520] + "…") if len(sintesis) > 520 else sintesis
+        resuelve_one_line = " ".join(resuelve.split())
+        resuelve_short = (resuelve_one_line[:420] + "…") if len(resuelve_one_line) > 420 else resuelve_one_line
+
+        decision = _plain_decision(resuelve) if resuelve else ""
+
+        block = [f"- **{providencia} ({fecha})**"]
+
+        if want_story and sintesis_short:
+            block.append(f"  - **¿De qué se trató?:** {sintesis_short}")
+
+        if (want_sentence or not want_story) and resuelve_short:
+            block.append(f"  - **Sentencia (texto):** {resuelve_short}")
+            if decision:
+                block.append(f"  - {decision}")
+
+        # Si la pregunta es de “detalle”, mostramos ambos (si existen)
+        if ("detalle" in q or "qué pasó" in q or "que paso" in q) and sintesis_short and resuelve_short:
+            # ya están incluidos por reglas anteriores, no hacemos nada extra
+            pass
+
+        block.append(f"  - 📄 Fuente: {providencia} ({fecha})")
+        lines.append("\n".join(block))
+
+    return "\n\n".join(lines)
+
+
+
+
+def answer(question: str, retrieved_docs: List[Dict], verbose: bool = True) -> str:
+    """Genera una respuesta usando el modo configurado."""
     context = format_context(retrieved_docs)
-    
+
     if verbose:
         print(f"\n{'='*50}")
         print(f"PREGUNTA: {question}")
         print(f"DOCUMENTOS RECUPERADOS: {len(retrieved_docs)}")
         for doc in retrieved_docs:
-            print(f"  - {doc['providencia']} (score: {doc.get('score', 0):.3f})")
-        print('='*50)
-    
+            print(f"  - {doc.get('providencia','')} (score: {doc.get('score', 0):.3f})")
+        print("=" * 50)
+
+    if LLM_MODE == "extractive":
+        return answer_extractive(question, retrieved_docs)
+
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {
             "role": "user",
             "content": (
-                f"Aquí están los casos relevantes que encontré:\n\n"
+                "Aquí están los casos relevantes que encontré:\n\n"
                 f"{context}\n\n"
                 f"Pregunta: {question}"
             ),
         },
     ]
-    
+
     if LLM_MODE == "azure":
-        response = call_llm_azure(messages)
-    else:
-        response = call_llm_local(messages)
-    
-    return response
+        out = call_llm_azure(messages)
+        if not (out or "").strip():
+            return answer_extractive(question, retrieved_docs)
+        return out
+
+    if LLM_MODE == "local":
+        try:
+            out = call_llm_local(messages)
+        except Exception as e:
+            out = ""
+        if not (out or "").strip():
+            return answer_extractive(question, retrieved_docs)
+        return out
+
+    raise ValueError("LLM_MODE inválido. Usa: azure | local | extractive")
 
 
-def save_answers(qa_pairs: list[dict], output_path: str = "outputs/respuestas.md"):
-    """
-    Guarda las respuestas en un archivo Markdown bien formateado.
-    
-    Args:
-        qa_pairs: Lista de dicts con keys 'question', 'answer', 'docs'
-        output_path: Ruta del archivo de salida
-    """
+def save_answers(qa_pairs: List[Dict], output_path: str = "outputs/respuestas.md") -> None:
+    """Guarda las respuestas en un archivo Markdown bien formateado."""
     Path(output_path).parent.mkdir(exist_ok=True)
-    
+
     lines = [
         "# Respuestas - Asesor Legal IA\n",
         "**Prueba Técnica 2 – DataKnow SAS**\n",
         "---\n",
     ]
-    
+
     for i, pair in enumerate(qa_pairs, 1):
         lines.append(f"## Pregunta {i}\n")
         lines.append(f"**{pair['question']}**\n")
         lines.append(f"\n{pair['answer']}\n")
-        
+
         if pair.get("docs"):
-            lines.append("\n**Casos consultados:**\n")
+            lines.append("\n**Casos consultados (retrieval):**\n")
             for doc in pair["docs"]:
-                lines.append(f"- {doc['providencia']} ({doc['fecha']}) – score: {doc.get('score', 0):.3f}\n")
-        
+                lines.append(
+                    f"- {doc.get('providencia','')} ({doc.get('fecha','')}) – score: {doc.get('score', 0):.3f}\n"
+                )
+
         lines.append("\n---\n")
-    
+
     with open(output_path, "w", encoding="utf-8") as f:
         f.writelines(lines)
-    
+
     print(f"\n✅ Respuestas guardadas en: {output_path}")

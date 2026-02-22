@@ -1,0 +1,5 @@
+Datos/
+outputs/
+.env
+__pycache__/
+venv/
