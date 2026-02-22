@@ -103,8 +103,6 @@ def call_llm_azure(messages: List[Dict]) -> str:
         return ""
     return text
 
-    return response.choices[0].message.content
-
 
 def call_llm_local(messages: List[Dict]) -> str:
     """Llama a un LLM local via Ollama."""
