@@ -15,4 +15,4 @@ COPY . .
 ENV PYTHONUNBUFFERED=1
 
 # Default runs the batch pipeline
-CMD ["python", "main.py", "--horizon", "36"]
+CMD ["python", "main.py", "--horizon", "36", "--models", "ets,sarima,prophet"]

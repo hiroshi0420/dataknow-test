@@ -91,22 +91,12 @@ Se realizó **backtesting rolling** sobre los últimos 12 meses del histórico p
 
 ### Backtesting (últimos 12 meses)
 
-*(Los valores exactos se generan al correr `main.py`)*
-
-| Equipo | MAE | RMSE | MAPE (%) |
-|---|---:|---:|---:|
-| Equipo 1 | 22.48 | 26.43 | 4.7 |
-| Equipo 2 | 32.65 | 40.60 | 3.3 |
+*(Los valores exactos se generan al correr `main.py` en el archivo leaderboard_modelos.csv (se realizo con ETS y SARIMA))* 
 
 ### Forecast 36 meses
 
 *(Los valores exactos se guardan en `outputs/forecast_36m.csv`)*
 
-| Punto del proyecto | Equipo 1 (media) | IC 95% | Equipo 2 (media) | IC 95% |
-|---|---:|---:|---:|---:|
-| Mes 1 (sep 2023) | 458.08 | [406.39, 513.23] | 926.70 | [835.98, 1017.51] |
-| Mes 12 (ago 2024) | 436.53 | [211.41, 673.26] | 900.33 | [550.17, 1283.16] |
-| Mes 36 (ago 2026) | 385.43 | [-113.78, 962.33] | 851.21 | [-36.19, 1815.67] |
 
 **Recomendación para contratos:** Usar el **percentil 90 (IC 95% superior)** como presupuesto conservador para negociación con proveedores. Esto cubre el 95% de los escenarios posibles con el modelo.
 
