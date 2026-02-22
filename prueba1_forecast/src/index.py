@@ -15,6 +15,7 @@ from .model import (
     forecast_equipos_from_materials,
     save_fitted_models,
 )
+from .model_compare import compare_and_forecast_equipos
 from .report import (
     ensure_output_dir,
     plot_equipos_historico,
@@ -24,6 +25,9 @@ from .report import (
     save_forecast_long,
     save_history,
     save_stats,
+    save_leaderboard,
+    save_forecast_models,
+    plot_forecast_comparison,
 )
 
 
@@ -67,6 +71,8 @@ def run_pipeline(
     horizon: int = 36,
     no_forecast: bool = False,
     n_simulations: int = 500,
+    models: list[str] | None = None,
+    test_months: int = 12,
 ) -> dict:
     """Ejecuta el pipeline end-to-end y guarda artefactos."""
 
@@ -94,9 +100,9 @@ def run_pipeline(
     if no_forecast:
         return artifacts
 
-    # Backtesting (últimos 12 meses) sobre equipos
-    bt_e1 = backtest_rolling_1step(df["equipo1"], test_months=12)
-    bt_e2 = backtest_rolling_1step(df["equipo2"], test_months=12)
+    # Backtesting (últimos N meses) sobre equipos – ETS baseline
+    bt_e1 = backtest_rolling_1step(df["equipo1"], test_months=test_months)
+    bt_e2 = backtest_rolling_1step(df["equipo2"], test_months=test_months)
 
     # Forecast
     results = forecast_equipos_from_materials(df, horizon=horizon, n_simulations=n_simulations)
@@ -108,6 +114,42 @@ def run_pipeline(
     df_long = results_to_long_df({"equipo1": results["equipo1"], "equipo2": results["equipo2"]})
     save_forecast_long(df_long, output_dir)
 
+    # Comparación de modelos (ETS vs SARIMA vs Prophet opcional) sobre equipos.
+    # Esta comparación modela directamente las series objetivo (equipo1/equipo2)
+    # y genera un leaderboard + forecast del mejor modelo por equipo.
+    models = models or ["ets", "sarima", "prophet"]
+    comp = compare_and_forecast_equipos(
+        df_equipos=df[["equipo1", "equipo2"]].copy(),
+        horizon=horizon,
+        test_months=test_months,
+        n_simulations=n_simulations,
+        models=models,
+    )
+
+    save_leaderboard(comp["leaderboard"], output_dir)
+
+    # Forecasts por modelo (formato largo) para auditoría y reporte
+    model_rows: list[dict] = []
+    for serie, md in comp["forecasts"].items():
+        for modelo, res in md.items():
+            for dt in res.forecast_mean.index:
+                model_rows.append(
+                    {
+                        "month": dt,
+                        "serie": serie,
+                        "modelo": modelo,
+                        "mean": float(res.forecast_mean.loc[dt]),
+                        "lower95": float(res.forecast_lower_95.loc[dt]),
+                        "upper95": float(res.forecast_upper_95.loc[dt]),
+                        "lower80": float(res.forecast_lower_80.loc[dt]),
+                        "upper80": float(res.forecast_upper_80.loc[dt]),
+                    }
+                )
+    if model_rows:
+        save_forecast_models(pd.DataFrame(model_rows), output_dir)
+
+    plot_forecast_comparison(comp["forecasts"], output_dir, best=comp["best"])
+
     # Guarda bundle para scoring (API / Azure ML)
     models_dir = output_dir / "models"
     bundle_path = save_fitted_models(df_materials, models_dir)
@@ -116,6 +158,7 @@ def run_pipeline(
         {
             "backtest": {"equipo1": bt_e1, "equipo2": bt_e2},
             "forecast": results,
+            "model_comparison": comp["leaderboard"],
             "bundle_path": bundle_path,
         }
     )

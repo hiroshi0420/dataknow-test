@@ -95,8 +95,6 @@ def call_llm_azure(messages: List[Dict]) -> str:
     choice = response.choices[0]
     text = (choice.message.content or "").strip()
 
-    # Debug útil (puedes dejarlo, no molesta)
-    print(f"[AZURE] finish_reason={getattr(choice, 'finish_reason', None)} | chars={len(text)}")
 
     if not text:
         # Si Azure responde vacío, hacemos fallback seguro para no romper la entrega

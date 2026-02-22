@@ -117,16 +117,3 @@ def filter_by_keywords(documents: list[dict], keywords: list[str]) -> list[dict]
 
     return filtered
 
-# Este bloque  lo use para pruebas locales, en productivo no es necesario.
-if __name__ == "__main__":
-    # Prueba rápida manual
-    from pathlib import Path
-
-    data_path = Path(__file__).resolve().parents[1] / "Datos" / "sentencias_pasadas.xlsx"
-    df_ = load_excel(str(data_path))
-    docs_ = build_documents(df_)
-    print(f"Filas cargadas: {len(df_)}")
-    print(f"Documentos construidos: {len(docs_)}")
-
-    redes_docs = filter_by_keywords(docs_, ["redes sociales", "facebook", "instagram", "twitter", "whatsapp", "tiktok"])
-    print(f"Docs redes sociales: {len(redes_docs)}")

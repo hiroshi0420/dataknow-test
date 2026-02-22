@@ -38,6 +38,20 @@ def save_forecast_long(df_forecast: pd.DataFrame, output_dir: Path) -> Path:
     return path
 
 
+def save_leaderboard(leaderboard: pd.DataFrame, output_dir: Path) -> Path:
+    """Guarda métricas por modelo/serie."""
+    path = output_dir / "leaderboard_modelos.csv"
+    leaderboard.to_csv(path, index=False)
+    return path
+
+
+def save_forecast_models(df_models: pd.DataFrame, output_dir: Path) -> Path:
+    """Guarda forecast por modelo (formato largo)."""
+    path = output_dir / "forecast_36m_modelos.csv"
+    df_models.to_csv(path, index=False)
+    return path
+
+
 def plot_materias_primas(df: pd.DataFrame, output_dir: Path) -> Path:
     fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
     fig.suptitle("Precios históricos (mensual) – Materias primas", fontsize=14)
@@ -147,4 +161,68 @@ def plot_volatility(df: pd.DataFrame, output_dir: Path) -> Path:
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return path
+
+
+def plot_forecast_comparison(
+    forecasts: dict[str, dict[str, ForecastResult]],
+    output_dir: Path,
+    best: dict[str, str] | None = None,
+) -> None:
+    """Genera dos gráficas (equipo1/equipo2) comparando medias por modelo.
+
+    Para legibilidad, se muestran las medias de cada modelo y la banda 95%
+    únicamente del mejor modelo (si está disponible).
+    """
+
+    for serie_name, models_dict in forecasts.items():
+        if not models_dict:
+            continue
+
+        # orden estable
+        model_names = sorted(models_dict.keys())
+
+        best_name = (best or {}).get(serie_name)
+        if not best_name or best_name not in models_dict:
+            best_name = "ets" if "ets" in models_dict else model_names[0]
+
+        fig, ax = plt.subplots(figsize=(14, 6))
+
+        # histórico
+        any_res = models_dict[model_names[0]]
+        hist = any_res.historical.iloc[-36:]
+        ax.plot(hist.index, hist.values, linewidth=2, label="Histórico")
+
+        cut = any_res.historical.index[-1]
+        ax.axvline(x=cut, linestyle=":", alpha=0.7)
+
+        # medias por modelo
+        for mn in model_names:
+            res = models_dict[mn]
+            ax.plot(res.forecast_mean.index, res.forecast_mean.values, linewidth=2, linestyle="--", label=f"{mn} (media)")
+
+        # banda 95% del best
+        best_res = models_dict[best_name]
+        x_fc = mdates.date2num(best_res.forecast_mean.index.to_pydatetime())
+        ax.fill_between(
+            x_fc,
+            np.asarray(best_res.forecast_lower_95.values, dtype=float),
+            np.asarray(best_res.forecast_upper_95.values, dtype=float),
+            alpha=0.2,
+            label=f"{best_name} IC 95%",
+        )
+
+        ax.set_title(f"Comparación de modelos – {serie_name}")
+        ax.set_ylabel("Precio")
+        ax.grid(alpha=0.3)
+        ax.legend()
+
+        ax.xaxis_date()
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=6))
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+
+        path = output_dir / f"05_comparacion_modelos_{serie_name}.png"
+        plt.savefig(path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
 

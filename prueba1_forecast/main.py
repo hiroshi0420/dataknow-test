@@ -11,6 +11,7 @@ Uso:
   python main.py
   python main.py --horizon 36
   python main.py --no-forecast
+  python main.py --models ets,sarima,prophet
 """
 
 from __future__ import annotations
@@ -26,6 +27,18 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--horizon", type=int, default=36, help="Meses a proyectar")
     p.add_argument("--no-forecast", action="store_true", help="Solo histórico y EDA")
     p.add_argument("--n-simulations", type=int, default=500, help="Simulaciones para bandas")
+    p.add_argument(
+        "--models",
+        type=str,
+        default="ets,sarima,prophet",
+        help="Modelos a comparar (coma-separado). 'prophet' es opcional si está instalado.",
+    )
+    p.add_argument(
+        "--test-months",
+        type=int,
+        default=12,
+        help="Meses finales para backtesting rolling 1-step (por modelo)",
+    )
     return p.parse_args()
 
 
@@ -39,6 +52,8 @@ def main() -> None:
         horizon=args.horizon,
         no_forecast=args.no_forecast,
         n_simulations=args.n_simulations,
+        models=[m.strip() for m in args.models.split(",") if m.strip()],
+        test_months=args.test_months,
     )
 
     start, end = artifacts["range"]
