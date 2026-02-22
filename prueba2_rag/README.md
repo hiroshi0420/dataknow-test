@@ -45,7 +45,7 @@ Referenciar el ejemplo de .env.example y cambiar las variables de entorno por la
 ### Modo local sin costo
 - **Embeddings**: local (`sentence-transformers` si está disponible; si no, fallback a **TF-IDF** offline, esto se hace para evitar problemas con el aplicativo debido a que no es un documento con alto volumen de datos).
 - **LLM**: 
-  - `LLM_MODE=local` usa **Ollama** (http://localhost:11434)
+  - `LLM_MODE=local` usa **Ollama** (http://ollama:11434), importante levantar contenedor de ollama: "docker compose --profile ollama up --build" e instalar el modelo compatible con tu equipo local por ejemplo "Mistral" o "Qwen" (Ejemplo: "docker pull ollama/mistral")
   - `LLM_MODE=extractive` NO usa LLM (sirve para probar pipeline sin credenciales)
 
 ## Ejecución
@@ -77,7 +77,7 @@ docker compose up --build
 
 ```bash
 # En .env -> LLM_MODE=local
-# y opcional: OLLAMA_MODEL=mistral
+# y opcional: OLLAMA_MODEL=mistral o qwen
 
 docker compose --profile ollama up --build
 ```

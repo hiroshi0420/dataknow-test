@@ -89,9 +89,19 @@ def call_llm_azure(messages: List[Dict]) -> str:
     response = client.chat.completions.create(
         model=AZURE_CHAT_DEPLOYMENT,
         messages=messages,
-        temperature=0.1,
-        max_tokens=900,
+        max_completion_tokens=900,
     )
+
+    choice = response.choices[0]
+    text = (choice.message.content or "").strip()
+
+    # Debug útil (puedes dejarlo, no molesta)
+    print(f"[AZURE] finish_reason={getattr(choice, 'finish_reason', None)} | chars={len(text)}")
+
+    if not text:
+        # Si Azure responde vacío, hacemos fallback seguro para no romper la entrega
+        return ""
+    return text
 
     return response.choices[0].message.content
 
@@ -106,14 +116,14 @@ def call_llm_local(messages: List[Dict]) -> str:
         prompt += f"{role}: {msg['content']}\n"
 
     response = requests.post(
-        "http://localhost:11434/api/generate",
+        "http://ollama:11434/api/generate",
         json={
             "model": os.getenv("OLLAMA_MODEL", "mistral"),
             "prompt": prompt,
             "stream": False,
             "options": {"temperature": 0.1},
         },
-        timeout=180,
+        timeout=800, # Se aumenta tiempo debido a capacidades locales, ajustar segun el caso.
     )
 
     response.raise_for_status()
@@ -214,10 +224,19 @@ def answer(question: str, retrieved_docs: List[Dict], verbose: bool = True) -> s
     ]
 
     if LLM_MODE == "azure":
-        return call_llm_azure(messages)
+        out = call_llm_azure(messages)
+        if not (out or "").strip():
+            return answer_extractive(question, retrieved_docs)
+        return out
 
     if LLM_MODE == "local":
-        return call_llm_local(messages)
+        try:
+            out = call_llm_local(messages)
+        except Exception as e:
+            out = ""
+        if not (out or "").strip():
+            return answer_extractive(question, retrieved_docs)
+        return out
 
     raise ValueError("LLM_MODE inválido. Usa: azure | local | extractive")
 
